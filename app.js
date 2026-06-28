@@ -24,7 +24,7 @@ function defaultState() {
       partner1: '',
       partner2: '',
       sessionsCompleted: 0,
-      totalExchanges: 0,        // ← warmth earned through actual answers
+      totalExchanges: 0,
       topicTagsUsed: []
     },
     sessions: [],
@@ -40,12 +40,18 @@ let appState = loadState();
 
 // Migrate old saves that don't have totalExchanges yet
 if (typeof appState.couple.totalExchanges === 'undefined') {
-  // Count from saved sessions as best estimate
   appState.couple.totalExchanges = appState.sessions.reduce(
     (sum, s) => sum + (s.exchanges?.length || 0), 0
   );
   saveState();
 }
+
+// ─── REFRESH COUNTER ──────────────────────────
+// Tracks how many times the current question has been refreshed
+// Resets when a new question is generated (not on refresh)
+
+let refreshCount = 0;
+const MAX_REFRESHES = 2;
 
 // ─── SCREEN ROUTER ────────────────────────────
 
@@ -56,25 +62,24 @@ function showScreen(id) {
 }
 
 // ─── DEPTH SYSTEM ─────────────────────────────
-// Depth is based on totalExchanges — actually answered prompts, not just sessions
 
 function getDepthLabel(couple) {
   const n = couple.totalExchanges || 0;
-  if (n === 0)   return '🍵 Cold cup';
-  if (n < 10)    return '🍵 Just steeping';
-  if (n < 30)    return '🍵 First warmth';
-  if (n < 60)    return '🍵 Full steep';
-  if (n < 100)   return '🍵 Deep brew';
-  return                '🍵 Aged leaves';
+  if (n === 0)  return '🍵 Cold cup';
+  if (n < 10)   return '🍵 Just steeping';
+  if (n < 30)   return '🍵 First warmth';
+  if (n < 60)   return '🍵 Full steep';
+  if (n < 100)  return '🍵 Deep brew';
+  return               '🍵 Aged leaves';
 }
 
 function getDepthNumber(couple) {
   const n = couple.totalExchanges || 0;
-  if (n === 0)   return 1;
-  if (n < 10)    return 2;
-  if (n < 30)    return 3;
-  if (n < 60)    return 4;
-  if (n < 100)   return 5;
+  if (n === 0)  return 1;
+  if (n < 10)   return 2;
+  if (n < 30)   return 3;
+  if (n < 60)   return 4;
+  if (n < 100)  return 5;
   return 6;
 }
 
@@ -84,12 +89,11 @@ function renderHomeStats() {
   const couple = appState.couple;
   const n      = couple.totalExchanges || 0;
 
-  document.getElementById('depth-badge').textContent       = getDepthLabel(couple);
-  document.getElementById('stat-depth-label').textContent  = getDepthLabel(couple);
-  document.getElementById('stat-exchanges').textContent    = n;
-  document.getElementById('stat-sessions').textContent     = couple.sessionsCompleted || 0;
+  document.getElementById('depth-badge').textContent      = getDepthLabel(couple);
+  document.getElementById('stat-depth-label').textContent = getDepthLabel(couple);
+  document.getElementById('stat-exchanges').textContent   = n;
+  document.getElementById('stat-sessions').textContent    = couple.sessionsCompleted || 0;
 
-  // Progress bar toward next depth level
   const thresholds = [0, 10, 30, 60, 100, Infinity];
   let currentFloor = 0;
   let nextCeiling  = 10;
@@ -153,7 +157,7 @@ async function generateQuestion() {
   const depth = getDepthNumber(couple);
   const mood  = currentSession.mood;
 
-  const usedTagsAll = couple.topicTagsUsed.slice(-20).join(', ') || 'none yet';
+  const usedTagsAll     = couple.topicTagsUsed.slice(-20).join(', ') || 'none yet';
   const usedTagsTonight = currentSession.exchanges
     .map(e => e.tags).flat().join(', ') || 'none yet';
 
@@ -186,6 +190,13 @@ CULTURAL CONTEXT:
 - Do NOT reference mamak, roti canai, teh tarik — wrong culture
 - Use familiar references naturally — kopitiam, dim sum, CNY, in-laws, pasar malam, bak kut teh — only when they genuinely fit the question, not forced
 
+SENSITIVE TOPICS — strictly avoid these:
+- Do NOT ask anything that imagines a deceased person speaking, reacting, or being present — e.g. "what would your dad say?", "what do you think he would think of this?"
+- Do NOT ask questions that romanticise or reference loss, grief, or missing someone who has passed
+- Do NOT ask about death, legacy, or "what would you want people to remember about you"
+- If a question touches on family or parents, keep it grounded in the present or the person's own feelings — never project onto someone who is gone
+- When in doubt, leave the question in the present tense and about living feelings
+
 TONE:
 - Warm, casual, a little cheeky — like a close friend asking over kopi
 - Never dramatic, never poetic, never scripted
@@ -193,7 +204,7 @@ TONE:
 
 GOOD EXAMPLES (this is the exact energy and purpose):
   "When you're having a really bad day and you don't want to talk about it yet — what's the thing you actually need from me in that moment, even if you'd never ask for it?"
-  "Think about the way your parents showed love when you were growing up. Is that similar or completely different to how you show love to me?"
+  "Think about the way you were raised — is there something from your upbringing that you've carried into how you show love to me, even without realising it?"
   "If we're being honest — is there something you've always wanted us to do together but never brought up because you weren't sure I'd be into it?"
   "CNY reunion dinner, the relatives start asking about our plans for kids or marriage. What are you actually feeling in that moment — and what do you wish you could say out loud?"
   "If I had a big opportunity that meant we'd have to do long distance for a year, what would be going through your head — and what would you actually say to me?"
@@ -202,7 +213,9 @@ GOOD EXAMPLES (this is the exact energy and purpose):
   "If you could change one small thing about how we spend time together — nothing big, just a small habit or ritual — what would it be?"
 
 BAD EXAMPLES (never do this):
-  "Picture us cooking our favourite mamak dish..." ← wrong culture, also not revealing anything about each other
+  "What do you think your dad would say about us now?" ← references someone who has passed
+  "If your father could see you today, what do you think he'd feel?" ← same issue
+  "Picture us cooking our favourite mamak dish..." ← wrong culture
   "If you won the lottery what would you buy?" ← fun but tells you nothing real
   "It's the night before your anniversary and fairy lights..." ← too dramatic and scripted
   "What is your biggest fear?" ← too blunt, no warmth or context
@@ -286,14 +299,39 @@ function getGreeting() {
 }
 
 // ─── PROMPT HINT ──────────────────────────────
-// Shows a subtle hint below the question so users know how to respond
 
 function setPromptHint(question, p1ElId, p2ElId) {
   const hint = "✍️ Answer honestly — there's no wrong answer here.";
-  const el1 = document.getElementById(p1ElId);
-  const el2 = document.getElementById(p2ElId);
+  const el1  = document.getElementById(p1ElId);
+  const el2  = document.getElementById(p2ElId);
   if (el1) el1.textContent = hint;
   if (el2) el2.textContent = hint;
+}
+
+// ─── REFRESH BUTTON HELPERS ───────────────────
+
+function showRefreshBtn() {
+  const btn = document.getElementById('btn-refresh-question');
+  if (btn) btn.style.display = 'block';
+}
+
+function hideRefreshBtn() {
+  const btn = document.getElementById('btn-refresh-question');
+  if (btn) btn.style.display = 'none';
+}
+
+function updateRefreshBtn() {
+  const btn = document.getElementById('btn-refresh-question');
+  if (!btn) return;
+
+  if (refreshCount >= MAX_REFRESHES) {
+    // Gently lock it — nudge them to just answer
+    btn.textContent = '✦ Give this one a go 😊';
+    btn.disabled    = true;
+  } else {
+    btn.textContent = '↻ Try a different question';
+    btn.disabled    = false;
+  }
 }
 
 // ─── INIT ─────────────────────────────────────
@@ -317,7 +355,7 @@ function init() {
 function showHome() {
   const { couple } = appState;
   document.getElementById('home-greeting').textContent = getGreeting();
-  document.getElementById('home-names').textContent =
+  document.getElementById('home-names').textContent    =
     `${couple.partner1} & ${couple.partner2}`;
   renderHomeStats();
   showScreen('screen-home');
@@ -344,28 +382,34 @@ function resumeSession() {
 async function startSession(mood) {
   appState.currentSession = {
     mood,
-    exchanges: [],
-    state: 'loading',
-    startDate: new Date().toISOString(),
-    answer1: null,
-    answer2: null,
-    answer1Draft: '',
-    answer2Draft: '',
+    exchanges:       [],
+    state:           'loading',
+    startDate:       new Date().toISOString(),
+    answer1:         null,
+    answer2:         null,
+    answer1Draft:    '',
+    answer2Draft:    '',
     currentQuestion: null,
-    currentTags: []
+    currentTags:     []
   };
   saveState();
 
+  // Reset refresh counter for the new question
+  refreshCount = 0;
+
   showScreen('screen-p1');
   setQuestionLoadingState(true);
+  hideRefreshBtn();
 
   try {
     const { question, tags } = await generateQuestion();
     appState.currentSession.currentQuestion = question;
-    appState.currentSession.currentTags = tags;
-    appState.currentSession.state = 'waiting_p1';
+    appState.currentSession.currentTags     = tags;
+    appState.currentSession.state           = 'waiting_p1';
     saveState();
     renderP1Screen();
+    showRefreshBtn();
+    updateRefreshBtn();
   } catch (err) {
     console.error('[TeaSteep] Failed to generate question:', err);
     showToast('Could not steep a question. Check console for details.');
@@ -398,7 +442,7 @@ function setQuestionLoadingState(isLoading) {
 function renderP1Screen() {
   const { couple, currentSession } = appState;
 
-  document.getElementById('p1-indicator').textContent = `● ${couple.partner1}`;
+  document.getElementById('p1-indicator').textContent    = `● ${couple.partner1}`;
   document.getElementById('p1-answer-label').textContent =
     `${couple.partner1}'s thoughts…`;
 
@@ -418,7 +462,7 @@ function renderP1Screen() {
 function renderP2Screen() {
   const { couple, currentSession } = appState;
 
-  document.getElementById('p2-indicator').textContent = `● ${couple.partner2}`;
+  document.getElementById('p2-indicator').textContent    = `● ${couple.partner2}`;
   document.getElementById('p2-answer-label').textContent =
     `${couple.partner2}'s thoughts…`;
 
@@ -444,6 +488,37 @@ function renderRevealScreen() {
   document.getElementById('reveal-answer-2').textContent      = last.answer2;
 }
 
+// ─── REFRESH QUESTION ─────────────────────────
+
+async function refreshQuestion() {
+  if (refreshCount >= MAX_REFRESHES) return;
+
+  refreshCount++;
+  updateRefreshBtn();
+
+  // Show loading, hide refresh btn while fetching
+  setQuestionLoadingState(true);
+  hideRefreshBtn();
+
+  try {
+    // Generate fresh question — do NOT touch tags or depth
+    const { question, tags } = await generateQuestion();
+    appState.currentSession.currentQuestion = question;
+    appState.currentSession.currentTags     = tags;
+    // State stays 'waiting_p1' — no change
+    saveState();
+    renderP1Screen();
+    showRefreshBtn();
+    updateRefreshBtn();
+  } catch (err) {
+    console.error('[TeaSteep] Failed to refresh question:', err);
+    showToast('Could not steep a new question. Try again.');
+    setQuestionLoadingState(false);
+    showRefreshBtn();
+    updateRefreshBtn();
+  }
+}
+
 // ─── NEXT QUESTION ────────────────────────────
 
 async function nextQuestion() {
@@ -454,11 +529,15 @@ async function nextQuestion() {
   appState.currentSession.state        = 'loading';
   saveState();
 
+  // Reset refresh counter for the new question
+  refreshCount = 0;
+
   document.getElementById('answer-p1').value = '';
   document.getElementById('answer-p2').value = '';
 
   showScreen('screen-p1');
   setQuestionLoadingState(true);
+  hideRefreshBtn();
 
   try {
     const { question, tags } = await generateQuestion();
@@ -467,6 +546,8 @@ async function nextQuestion() {
     appState.currentSession.state           = 'waiting_p1';
     saveState();
     renderP1Screen();
+    showRefreshBtn();
+    updateRefreshBtn();
   } catch (err) {
     console.error('[TeaSteep] Failed to generate next question:', err);
     showToast('Could not steep the next question. Try again.');
@@ -505,7 +586,6 @@ async function wrapUp() {
   // ── Persist session ──────────────────────────
   const { couple, currentSession } = appState;
 
-  // Increment totalExchanges by how many were answered tonight
   couple.totalExchanges = (couple.totalExchanges || 0) + exchanges.length;
 
   const allTags = currentSession.exchanges.flatMap(e => e.tags);
@@ -557,7 +637,7 @@ function moodEmoji(mood) {
 }
 
 function expandHistory(index) {
-  const s       = appState.sessions[index];
+  const s          = appState.sessions[index];
   const { couple } = appState;
 
   const detail = s.exchanges.map(e => `
@@ -609,10 +689,13 @@ document.querySelectorAll('.mood-card').forEach(card => {
   card.addEventListener('click', () => startSession(card.dataset.mood));
 });
 
-// P1 done
+// P1 done — lock the question, hide refresh
 document.getElementById('btn-p1-done').addEventListener('click', () => {
   const answer = document.getElementById('answer-p1').value.trim();
   if (!answer) return showToast('Write something first, even just a word. 🍵');
+
+  // Lock the question — refresh is no longer available
+  hideRefreshBtn();
 
   appState.currentSession.answer1      = answer;
   appState.currentSession.answer1Draft = '';
@@ -623,6 +706,9 @@ document.getElementById('btn-p1-done').addEventListener('click', () => {
     `${appState.couple.partner2}, it's your turn.`;
   showScreen('screen-handoff');
 });
+
+// Refresh question (P1 only, before answering)
+document.getElementById('btn-refresh-question').addEventListener('click', refreshQuestion);
 
 // Auto-save drafts
 document.getElementById('answer-p1').addEventListener('input', e => {

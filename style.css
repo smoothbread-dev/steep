@@ -647,6 +647,39 @@ textarea:focus {
   background: #fff0f0;
 }
 
+/* ─── REFRESH BUTTON ──────────────────────────
+   Subtle, sits below the question card.
+   Disappears once P1 submits their answer.
+   ──────────────────────────────────────────── */
+
+.btn-refresh {
+  display: block;
+  margin: -8px auto 0 auto; /* pulls it slightly closer to the question card */
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 20px;
+  transition: var(--transition);
+  letter-spacing: 0.02em;
+  text-align: center;
+  width: auto;
+}
+
+.btn-refresh:hover:not(:disabled) {
+  color: var(--tea-brown);
+  background: rgba(160, 133, 108, 0.08);
+}
+
+.btn-refresh:disabled {
+  opacity: 0.45;
+  cursor: default;
+  color: var(--tea-light);
+}
+
 /* ============================================
    REVEAL TITLE
    ============================================ */

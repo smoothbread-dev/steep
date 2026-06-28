@@ -173,22 +173,25 @@ async function generateQuestion() {
     'Deeply bonded. The most personal and meaningful prompts are appropriate.'
   ];
 
-  const prompt = `You are a gentle conversation guide for couples. Generate ONE short open prompt.
+  const prompt = `You are a gentle conversation guide for couples. Generate ONE scenario-based conversation prompt.
 
 RULES:
-- Maximum 10 words. Shorter is better.
-- Must end with … (ellipsis) — it is an open sentence for them to complete, never a closed statement
-- Never write a full sentence or closed thought
-- Never ask a direct question
+- Paint a small, specific scenario or moment — give it texture and context
+- The prompt should feel like a scene they can both step into together
+- End with … so it trails off and invites them to complete it naturally
+- Avoid abstract or generic fill-in-the-blank starters
+- Never ask a direct question like "What is your biggest fear?"
+- Length: 1–3 sentences is ideal. Long enough to set a scene, short enough to feel light
 - Good examples:
-    "Something I never say enough is…"
-    "The version of you I fell for was…"
-    "A place I want to take you is…"
-    "When I picture us in 10 years…"
-    "The moment I feel most at home is…"
+    "Imagine we finally book that trip we always talk about but never plan. We've just landed and stepped outside the airport — the first thing I'd want to do is…"
+    "It's a rainy Tuesday and neither of us has anywhere to be. The kind of afternoon that just happens. I'd want to spend it…"
+    "There's a version of our future I think about sometimes — not the big milestones, just the quiet ordinary day. In that day, we're…"
+    "I remember a moment early on when I saw a side of you I wasn't expecting. We were…"
+    "If we could design our perfect home together — not about money, just about feeling — the one thing I'd fight for is…"
 - Bad examples (never do this):
-    "A small dream I have for us is to start a shared garden where we grow our favorite herbs…" ← too long and too closed
-    "What is your biggest fear?" ← direct question, no ellipsis
+    "Something I never say enough is…" ← too abstract, no scene
+    "A place I want to take you is…" ← too bare, no texture
+    "What is your biggest fear?" ← direct question
 - Return ONLY the prompt on the first line
 - Then on a new line: TAGS: tag1, tag2, tag3 (2–4 tags from: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
 
@@ -270,12 +273,7 @@ function getGreeting() {
 // Shows a subtle hint below the question so users know how to respond
 
 function setPromptHint(question, p1ElId, p2ElId) {
-  // If the prompt ends with … it's a sentence to complete
-  // Otherwise give a gentle nudge
-  const hint = question && question.trim().endsWith('…')
-    ? '✍️ Complete the thought, or share what it brings up for you.'
-    : '✍️ Share whatever comes to mind.';
-
+  const hint = '✍️ Step into the scene — finish it in your own words.';
   const el1 = document.getElementById(p1ElId);
   const el2 = document.getElementById(p2ElId);
   if (el1) el1.textContent = hint;

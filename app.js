@@ -4,7 +4,7 @@
    ============================================ */
 
 // ─── HARDCODED WORKER URL ─────────────────────
-const WORKER_URL = 'https://groq-proxy.henryooi0077.workers.dev/';
+const WORKER_URL = 'https://groq-proxy.henryooi0077.workers.dev';
 
 // ─── STATE ────────────────────────────────────
 
@@ -67,17 +67,17 @@ function getDepthNumber(sessions) {
 
 // ─── AI CALL ──────────────────────────────────
 
-async function callGroq(messages) {
-  console.log('[TeaSteep] Calling Groq via worker:', WORKER_URL);
+async function callGroq(userPrompt) {
+  console.log('[TeaSteep] Calling worker...');
 
   const res = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'openai/gpt-oss-20b',
-      messages,
+      model:       'openai/gpt-oss-20b',
+      messages:    [{ role: 'user', content: userPrompt }],
       temperature: 0.85,
-      max_tokens: 300
+      max_tokens:  3000
     })
   });
 
@@ -88,11 +88,11 @@ async function callGroq(messages) {
   }
 
   const data = await res.json();
-  console.log('[TeaSteep] Groq response:', data);
+  console.log('[TeaSteep] Response:', data);
 
-  if (!data.choices || !data.choices[0]) {
-    console.error('[TeaSteep] Unexpected response shape:', data);
-    throw new Error('Unexpected response from Groq');
+  if (!data.choices?.[0]?.message?.content) {
+    console.error('[TeaSteep] Empty or missing content:', data);
+    throw new Error('No content returned from model');
   }
 
   return data.choices[0].message.content.trim();
@@ -103,15 +103,16 @@ async function callGroq(messages) {
 async function generateQuestion() {
   const { couple, currentSession } = appState;
   const depth = getDepthNumber(couple.sessionsCompleted);
-  const mood = currentSession.mood;
+  const mood  = currentSession.mood;
+
   const usedTagsAll = couple.topicTagsUsed.slice(-20).join(', ') || 'none yet';
   const usedTagsTonight = currentSession.exchanges
     .map(e => e.tags).flat().join(', ') || 'none yet';
 
   const moodGuide = {
     Light: 'Keep it warm, light, and easy. Avoid anything heavy or emotionally demanding. Think: fond memories, small joys, gentle curiosities.',
-    Cozy: 'Go a little deeper. Touch on values, preferences, small dreams. Comfortable but meaningful.',
-    Open: 'Go somewhere real. Deeper feelings, meaningful reflections, things that matter. Still warm, never harsh.'
+    Cozy:  'Go a little deeper. Touch on values, preferences, small dreams. Comfortable but meaningful.',
+    Open:  'Go somewhere real. Deeper feelings, meaningful reflections, things that matter. Still warm, never harsh.'
   };
 
   const depthGuide = [
@@ -124,40 +125,34 @@ async function generateQuestion() {
     'Deeply bonded. The most personal and meaningful questions are appropriate.'
   ];
 
-  const systemPrompt = `You are a gentle conversation guide for couples. Your job is to generate ONE single conversation prompt.
+  const prompt = `You are a gentle conversation guide for couples. Generate ONE conversation prompt for a couple to reflect on together.
 
-Rules:
-- NEVER ask direct questions like "What is your biggest fear?"
+RULES:
+- Never ask direct questions like "What is your biggest fear?"
 - Frame prompts as observations, shared scenarios, or fill-in-together sentences
-- Examples of good framing: "Something I've never told you about how I felt when we first met is…", "If our relationship were a season, right now it feels like…", "A small thing you do that I quietly love is…"
-- Return ONLY the prompt text on the first line, nothing else before it
-- Then on a new line write: TAGS: tag1, tag2, tag3 (2-4 topic tags like: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
+- Good examples: "Something I've never told you about how I felt when we first met is…", "If our relationship were a season right now it feels like…", "A small thing you do that I quietly love is…"
+- Return the prompt text on the first line only
+- Then on a new line write: TAGS: tag1, tag2, tag3 (2-4 tags from: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
 
 Depth level: ${depth}/6. ${depthGuide[depth]}
 Tonight's ceiling: ${mood}. ${moodGuide[mood]}
 Topics used across all sessions (avoid recently): ${usedTagsAll}
-Topics used tonight already (avoid completely): ${usedTagsTonight}`;
+Topics used tonight already (avoid completely): ${usedTagsTonight}
 
-  const raw = await callGroq([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: 'Generate the next prompt for this couple.' }
-  ]);
+Generate the prompt now:`;
 
+  const raw = await callGroq(prompt);
   console.log('[TeaSteep] Raw question output:', raw);
 
-  // Parse tags from last line
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines        = raw.split('\n').map(l => l.trim()).filter(Boolean);
   const tagLineIndex = lines.findIndex(l => l.startsWith('TAGS:'));
-  const tags = tagLineIndex !== -1
+  const tags         = tagLineIndex !== -1
     ? lines[tagLineIndex].replace('TAGS:', '').split(',').map(t => t.trim().toLowerCase())
     : [];
-  const questionLines = tagLineIndex !== -1
-    ? lines.slice(0, tagLineIndex)
-    : lines;
-  const question = questionLines.join(' ').trim();
+  const question     = (tagLineIndex !== -1 ? lines.slice(0, tagLineIndex) : lines)
+    .join(' ').trim();
 
   console.log('[TeaSteep] Parsed question:', question, '| Tags:', tags);
-
   return { question, tags };
 }
 
@@ -175,18 +170,18 @@ async function generateSummary() {
     `Prompt ${i + 1}: "${e.question}"\n${couple.partner1}: "${e.answer1}"\n${couple.partner2}: "${e.answer2}"`
   ).join('\n\n');
 
-  const systemPrompt = `You are a warm, gentle narrator reflecting on a couple's conversation.
-Write a short, warm summary (3-5 sentences) that reflects something meaningful back to them about tonight's conversation.
+  const prompt = `You are a warm, gentle narrator reflecting on a couple's conversation tonight.
+Write a short warm summary (3-5 sentences) that reflects something meaningful back to them.
 Be poetic but grounded. Notice small things. Don't be cheesy or over-the-top.
-Address them warmly. Return only the summary text.`;
+Address them warmly by name. Return only the summary text, nothing else.
 
-  return await callGroq([
-    { role: 'system', content: systemPrompt },
-    {
-      role: 'user',
-      content: `Here is what ${couple.partner1} and ${couple.partner2} shared tonight:\n\n${exchangeText}`
-    }
-  ]);
+Here is what ${couple.partner1} and ${couple.partner2} shared tonight:
+
+${exchangeText}
+
+Write the summary now:`;
+
+  return await callGroq(prompt);
 }
 
 // ─── TOAST ────────────────────────────────────

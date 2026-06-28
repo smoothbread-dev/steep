@@ -24,6 +24,7 @@ function defaultState() {
       partner1: '',
       partner2: '',
       sessionsCompleted: 0,
+      totalExchanges: 0,        // ← warmth earned through actual answers
       topicTagsUsed: []
     },
     sessions: [],
@@ -37,6 +38,15 @@ function saveState() {
 
 let appState = loadState();
 
+// Migrate old saves that don't have totalExchanges yet
+if (typeof appState.couple.totalExchanges === 'undefined') {
+  // Count from saved sessions as best estimate
+  appState.couple.totalExchanges = appState.sessions.reduce(
+    (sum, s) => sum + (s.exchanges?.length || 0), 0
+  );
+  saveState();
+}
+
 // ─── SCREEN ROUTER ────────────────────────────
 
 function showScreen(id) {
@@ -46,23 +56,61 @@ function showScreen(id) {
 }
 
 // ─── DEPTH SYSTEM ─────────────────────────────
+// Depth is based on totalExchanges — actually answered prompts, not just sessions
 
-function getDepthLabel(sessions) {
-  if (sessions === 0)  return '🍵 First sip';
-  if (sessions < 3)   return '🍵 Just steeping';
-  if (sessions < 8)   return '🍵 Getting warm';
-  if (sessions < 20)  return '🍵 Well steeped';
-  if (sessions < 40)  return '🍵 Deep brew';
-  return '🍵 Aged leaves';
+function getDepthLabel(couple) {
+  const n = couple.totalExchanges || 0;
+  if (n === 0)   return '🍵 Cold cup';
+  if (n < 10)    return '🍵 Just steeping';
+  if (n < 30)    return '🍵 First warmth';
+  if (n < 60)    return '🍵 Full steep';
+  if (n < 100)   return '🍵 Deep brew';
+  return                '🍵 Aged leaves';
 }
 
-function getDepthNumber(sessions) {
-  if (sessions === 0)  return 1;
-  if (sessions < 3)   return 2;
-  if (sessions < 8)   return 3;
-  if (sessions < 20)  return 4;
-  if (sessions < 40)  return 5;
+function getDepthNumber(couple) {
+  const n = couple.totalExchanges || 0;
+  if (n === 0)   return 1;
+  if (n < 10)    return 2;
+  if (n < 30)    return 3;
+  if (n < 60)    return 4;
+  if (n < 100)   return 5;
   return 6;
+}
+
+// ─── HOME STATS ───────────────────────────────
+
+function renderHomeStats() {
+  const couple = appState.couple;
+  const n      = couple.totalExchanges || 0;
+
+  document.getElementById('depth-badge').textContent       = getDepthLabel(couple);
+  document.getElementById('stat-depth-label').textContent  = getDepthLabel(couple);
+  document.getElementById('stat-exchanges').textContent    = n;
+  document.getElementById('stat-sessions').textContent     = couple.sessionsCompleted || 0;
+
+  // Progress bar toward next depth level
+  const thresholds = [0, 10, 30, 60, 100, Infinity];
+  let currentFloor = 0;
+  let nextCeiling  = 10;
+
+  for (let i = 0; i < thresholds.length - 1; i++) {
+    if (n >= thresholds[i] && n < thresholds[i + 1]) {
+      currentFloor = thresholds[i];
+      nextCeiling  = thresholds[i + 1];
+      break;
+    }
+  }
+
+  const isMaxed = n >= 100;
+  const pct     = isMaxed
+    ? 100
+    : Math.round(((n - currentFloor) / (nextCeiling - currentFloor)) * 100);
+
+  document.getElementById('depth-progress-fill').style.width = `${pct}%`;
+  document.getElementById('depth-progress-label').textContent = isMaxed
+    ? '🍵 Fully steeped'
+    : `${n} / ${nextCeiling} prompts to next level`;
 }
 
 // ─── AI CALL ──────────────────────────────────
@@ -102,7 +150,7 @@ async function callGroq(userPrompt) {
 
 async function generateQuestion() {
   const { couple, currentSession } = appState;
-  const depth = getDepthNumber(couple.sessionsCompleted);
+  const depth = getDepthNumber(couple);
   const mood  = currentSession.mood;
 
   const usedTagsAll = couple.topicTagsUsed.slice(-20).join(', ') || 'none yet';
@@ -110,29 +158,39 @@ async function generateQuestion() {
     .map(e => e.tags).flat().join(', ') || 'none yet';
 
   const moodGuide = {
-    Light: 'Keep it warm, light, and easy. Avoid anything heavy or emotionally demanding. Think: fond memories, small joys, gentle curiosities.',
+    Light: 'Keep it warm, light, and easy. Avoid anything heavy or emotionally demanding.',
     Cozy:  'Go a little deeper. Touch on values, preferences, small dreams. Comfortable but meaningful.',
-    Open:  'Go somewhere real. Deeper feelings, meaningful reflections, things that matter. Still warm, never harsh.'
+    Open:  'Go somewhere real. Deeper feelings, meaningful reflections. Still warm, never harsh.'
   };
 
   const depthGuide = [
     '',
-    'This couple is just starting out. Keep questions very warm and low-stakes.',
+    'This couple is just starting out. Keep it very warm and low-stakes.',
     'They have shared a little. Slightly more personal is fine.',
     'They know each other well. Personal and reflective questions work.',
-    'Deep familiarity. Rich, layered questions are welcome.',
-    'Long history together. Questions can touch on growth, change, and depth.',
-    'Deeply bonded. The most personal and meaningful questions are appropriate.'
+    'Deep familiarity. Rich, layered prompts are welcome.',
+    'Long history together. Touch on growth, change, and depth.',
+    'Deeply bonded. The most personal and meaningful prompts are appropriate.'
   ];
 
-  const prompt = `You are a gentle conversation guide for couples. Generate ONE conversation prompt for a couple to reflect on together.
+  const prompt = `You are a gentle conversation guide for couples. Generate ONE short open prompt.
 
 RULES:
-- Never ask direct questions like "What is your biggest fear?"
-- Frame prompts as observations, shared scenarios, or fill-in-together sentences
-- Good examples: "Something I've never told you about how I felt when we first met is…", "If our relationship were a season right now it feels like…", "A small thing you do that I quietly love is…"
-- Return the prompt text on the first line only
-- Then on a new line write: TAGS: tag1, tag2, tag3 (2-4 tags from: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
+- Maximum 10 words. Shorter is better.
+- Must end with … (ellipsis) — it is an open sentence for them to complete, never a closed statement
+- Never write a full sentence or closed thought
+- Never ask a direct question
+- Good examples:
+    "Something I never say enough is…"
+    "The version of you I fell for was…"
+    "A place I want to take you is…"
+    "When I picture us in 10 years…"
+    "The moment I feel most at home is…"
+- Bad examples (never do this):
+    "A small dream I have for us is to start a shared garden where we grow our favorite herbs…" ← too long and too closed
+    "What is your biggest fear?" ← direct question, no ellipsis
+- Return ONLY the prompt on the first line
+- Then on a new line: TAGS: tag1, tag2, tag3 (2–4 tags from: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
 
 Depth level: ${depth}/6. ${depthGuide[depth]}
 Tonight's ceiling: ${mood}. ${moodGuide[mood]}
@@ -208,6 +266,22 @@ function getGreeting() {
   return 'Good night';
 }
 
+// ─── PROMPT HINT ──────────────────────────────
+// Shows a subtle hint below the question so users know how to respond
+
+function setPromptHint(question, p1ElId, p2ElId) {
+  // If the prompt ends with … it's a sentence to complete
+  // Otherwise give a gentle nudge
+  const hint = question && question.trim().endsWith('…')
+    ? '✍️ Complete the thought, or share what it brings up for you.'
+    : '✍️ Share whatever comes to mind.';
+
+  const el1 = document.getElementById(p1ElId);
+  const el2 = document.getElementById(p2ElId);
+  if (el1) el1.textContent = hint;
+  if (el2) el2.textContent = hint;
+}
+
 // ─── INIT ─────────────────────────────────────
 
 function init() {
@@ -228,11 +302,10 @@ function init() {
 
 function showHome() {
   const { couple } = appState;
-  document.getElementById('depth-badge').textContent =
-    getDepthLabel(couple.sessionsCompleted);
   document.getElementById('home-greeting').textContent = getGreeting();
   document.getElementById('home-names').textContent =
     `${couple.partner1} & ${couple.partner2}`;
+  renderHomeStats();
   showScreen('screen-home');
 }
 
@@ -269,7 +342,6 @@ async function startSession(mood) {
   };
   saveState();
 
-  // Show P1 screen with loading state immediately
   showScreen('screen-p1');
   setQuestionLoadingState(true);
 
@@ -292,16 +364,18 @@ async function startSession(mood) {
 // ─── LOADING STATE HELPER ─────────────────────
 
 function setQuestionLoadingState(isLoading) {
-  const qText = document.getElementById('question-text-p1');
+  const qText    = document.getElementById('question-text-p1');
   const qLoading = document.getElementById('q-loading');
+  const hint     = document.getElementById('prompt-hint-p1');
 
   if (isLoading) {
     qLoading.style.display = 'flex';
-    qText.style.display = 'none';
-    qText.textContent = '';
+    qText.style.display    = 'none';
+    qText.textContent      = '';
+    if (hint) hint.textContent = '';
   } else {
     qLoading.style.display = 'none';
-    qText.style.display = 'block';
+    qText.style.display    = 'block';
   }
 }
 
@@ -315,8 +389,11 @@ function renderP1Screen() {
     `${couple.partner1}'s thoughts…`;
 
   setQuestionLoadingState(false);
-  document.getElementById('question-text-p1').textContent =
-    currentSession.currentQuestion || '';
+
+  const question = currentSession.currentQuestion || '';
+  document.getElementById('question-text-p1').textContent = question;
+
+  setPromptHint(question, 'prompt-hint-p1', null);
 
   document.getElementById('answer-p1').value =
     currentSession.answer1Draft || '';
@@ -330,8 +407,11 @@ function renderP2Screen() {
   document.getElementById('p2-indicator').textContent = `● ${couple.partner2}`;
   document.getElementById('p2-answer-label').textContent =
     `${couple.partner2}'s thoughts…`;
-  document.getElementById('question-text-p2').textContent =
-    currentSession.currentQuestion || '';
+
+  const question = currentSession.currentQuestion || '';
+  document.getElementById('question-text-p2').textContent = question;
+
+  setPromptHint(question, null, 'prompt-hint-p2');
 
   document.getElementById('answer-p2').value =
     currentSession.answer2Draft || '';
@@ -344,21 +424,20 @@ function renderRevealScreen() {
   const last = currentSession.exchanges[currentSession.exchanges.length - 1];
 
   document.getElementById('question-text-reveal').textContent = last.question;
-  document.getElementById('reveal-name-1').textContent = couple.partner1;
-  document.getElementById('reveal-answer-1').textContent = last.answer1;
-  document.getElementById('reveal-name-2').textContent = couple.partner2;
-  document.getElementById('reveal-answer-2').textContent = last.answer2;
+  document.getElementById('reveal-name-1').textContent        = couple.partner1;
+  document.getElementById('reveal-answer-1').textContent      = last.answer1;
+  document.getElementById('reveal-name-2').textContent        = couple.partner2;
+  document.getElementById('reveal-answer-2').textContent      = last.answer2;
 }
 
 // ─── NEXT QUESTION ────────────────────────────
 
 async function nextQuestion() {
-  // Reset drafts and show loading
   appState.currentSession.answer1Draft = '';
   appState.currentSession.answer2Draft = '';
-  appState.currentSession.answer1 = null;
-  appState.currentSession.answer2 = null;
-  appState.currentSession.state = 'loading';
+  appState.currentSession.answer1      = null;
+  appState.currentSession.answer2      = null;
+  appState.currentSession.state        = 'loading';
   saveState();
 
   document.getElementById('answer-p1').value = '';
@@ -370,8 +449,8 @@ async function nextQuestion() {
   try {
     const { question, tags } = await generateQuestion();
     appState.currentSession.currentQuestion = question;
-    appState.currentSession.currentTags = tags;
-    appState.currentSession.state = 'waiting_p1';
+    appState.currentSession.currentTags     = tags;
+    appState.currentSession.state           = 'waiting_p1';
     saveState();
     renderP1Screen();
   } catch (err) {
@@ -387,11 +466,11 @@ async function wrapUp() {
   showScreen('screen-summary');
 
   const summaryLoading = document.getElementById('summary-loading');
-  const summaryText = document.getElementById('summary-text');
+  const summaryText    = document.getElementById('summary-text');
 
   summaryLoading.style.display = 'flex';
-  summaryText.style.display = 'none';
-  summaryText.textContent = '';
+  summaryText.style.display    = 'none';
+  summaryText.textContent      = '';
 
   let summary = '';
   try {
@@ -402,15 +481,19 @@ async function wrapUp() {
   }
 
   summaryLoading.style.display = 'none';
-  summaryText.style.display = 'block';
-  summaryText.textContent = summary;
+  summaryText.style.display    = 'block';
+  summaryText.textContent      = summary;
 
   const exchanges = appState.currentSession.exchanges;
   document.getElementById('session-stats').innerHTML =
     `${exchanges.length} question${exchanges.length !== 1 ? 's' : ''} explored · ${appState.currentSession.mood} night`;
 
-  // Persist session
+  // ── Persist session ──────────────────────────
   const { couple, currentSession } = appState;
+
+  // Increment totalExchanges by how many were answered tonight
+  couple.totalExchanges = (couple.totalExchanges || 0) + exchanges.length;
+
   const allTags = currentSession.exchanges.flatMap(e => e.tags);
   couple.topicTagsUsed = [...couple.topicTagsUsed, ...allTags].slice(-60);
   couple.sessionsCompleted += 1;
@@ -419,8 +502,8 @@ async function wrapUp() {
     date: new Date().toLocaleDateString('en-GB', {
       day: 'numeric', month: 'short', year: 'numeric'
     }),
-    mood: currentSession.mood,
-    depth: getDepthNumber(couple.sessionsCompleted),
+    mood:      currentSession.mood,
+    depth:     getDepthNumber(couple),
     exchanges: currentSession.exchanges,
     summary
   });
@@ -432,7 +515,7 @@ async function wrapUp() {
 // ─── HISTORY ──────────────────────────────────
 
 function renderHistory() {
-  const list = document.getElementById('history-list');
+  const list     = document.getElementById('history-list');
   const sessions = [...appState.sessions].reverse();
 
   if (sessions.length === 0) {
@@ -460,7 +543,7 @@ function moodEmoji(mood) {
 }
 
 function expandHistory(index) {
-  const s = appState.sessions[index];
+  const s       = appState.sessions[index];
   const { couple } = appState;
 
   const detail = s.exchanges.map(e => `
@@ -494,7 +577,7 @@ function expandHistory(index) {
 
 // ─── EVENT LISTENERS ──────────────────────────
 
-// Setup (no Worker URL field needed anymore)
+// Setup
 document.getElementById('btn-setup-done').addEventListener('click', () => {
   const p1 = document.getElementById('input-p1').value.trim();
   const p2 = document.getElementById('input-p2').value.trim();
@@ -517,9 +600,9 @@ document.getElementById('btn-p1-done').addEventListener('click', () => {
   const answer = document.getElementById('answer-p1').value.trim();
   if (!answer) return showToast('Write something first, even just a word. 🍵');
 
-  appState.currentSession.answer1 = answer;
+  appState.currentSession.answer1      = answer;
   appState.currentSession.answer1Draft = '';
-  appState.currentSession.state = 'waiting_p2';
+  appState.currentSession.state        = 'waiting_p2';
   saveState();
 
   document.getElementById('handoff-msg').textContent =
@@ -554,20 +637,20 @@ document.getElementById('btn-p2-done').addEventListener('click', () => {
   if (!answer) return showToast('Write something first, even just a word. 🍵');
 
   const { currentSession } = appState;
-  currentSession.answer2 = answer;
+  currentSession.answer2      = answer;
   currentSession.answer2Draft = '';
-  currentSession.state = 'revealed';
+  currentSession.state        = 'revealed';
 
   currentSession.exchanges.push({
     question: currentSession.currentQuestion,
-    tags: currentSession.currentTags || [],
-    answer1: currentSession.answer1,
-    answer2: answer
+    tags:     currentSession.currentTags || [],
+    answer1:  currentSession.answer1,
+    answer2:  answer
   });
 
   currentSession.currentQuestion = null;
-  currentSession.currentTags = null;
-  currentSession.answer1 = null;
+  currentSession.currentTags     = null;
+  currentSession.answer1         = null;
   saveState();
 
   renderRevealScreen();

@@ -37,9 +37,10 @@
   <div id="screen-home" class="screen">
     <div class="screen-inner">
       <header class="top-bar">
-        <div class="depth-badge" id="depth-badge">🍵 First sip</div>
+        <div class="depth-badge" id="depth-badge">🍵 Cold cup</div>
         <button class="icon-btn" id="btn-settings" title="Settings">⚙️</button>
       </header>
+
       <div class="home-hero">
         <div class="tea-cup-anim small">
           <div class="cup">🍵</div>
@@ -47,8 +48,36 @@
         </div>
         <h2 id="home-greeting">Good evening</h2>
         <p class="couple-names" id="home-names">Aisha & Reza</p>
-        <p class="home-sub">How's tonight feeling?</p>
       </div>
+
+      <!-- STATS STRIP -->
+      <div class="stats-strip">
+        <div class="stat-tile">
+          <span class="stat-value" id="stat-depth-label">🍵 Cold cup</span>
+          <span class="stat-label">Connection depth</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-tile">
+          <span class="stat-value" id="stat-exchanges">0</span>
+          <span class="stat-label">Prompts answered</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-tile">
+          <span class="stat-value" id="stat-sessions">0</span>
+          <span class="stat-label">Sessions together</span>
+        </div>
+      </div>
+
+      <!-- PROGRESS BAR -->
+      <div class="depth-progress-wrap">
+        <div class="depth-progress-track">
+          <div class="depth-progress-fill" id="depth-progress-fill"></div>
+        </div>
+        <span class="depth-progress-label" id="depth-progress-label"></span>
+      </div>
+
+      <p class="home-sub">How's tonight feeling?</p>
+
       <div class="mood-cards">
         <button class="mood-card" data-mood="Light">
           <span class="mood-icon">🌿</span>
@@ -66,6 +95,7 @@
           <span class="mood-desc">Somewhere real</span>
         </button>
       </div>
+
       <button class="btn-ghost" id="btn-history">📖 Look back</button>
     </div>
   </div>
@@ -86,6 +116,7 @@
         </div>
         <p class="question-text" id="question-text-p1"></p>
       </div>
+      <p class="prompt-hint" id="prompt-hint-p1"></p>
       <div class="answer-area">
         <label class="answer-label" id="p1-answer-label">Your thoughts…</label>
         <textarea id="answer-p1" placeholder="Write freely. Only you can see this for now." rows="5"></textarea>
@@ -115,6 +146,7 @@
       <div class="question-card">
         <p class="question-text" id="question-text-p2"></p>
       </div>
+      <p class="prompt-hint" id="prompt-hint-p2"></p>
       <div class="answer-area">
         <label class="answer-label" id="p2-answer-label">Your thoughts…</label>
         <textarea id="answer-p2" placeholder="Write freely. Only you can see this for now." rows="5"></textarea>

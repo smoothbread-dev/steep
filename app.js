@@ -176,23 +176,24 @@ async function generateQuestion() {
   const prompt = `You are a gentle conversation guide for couples. Generate ONE scenario-based conversation prompt.
 
 RULES:
-- Paint a small, specific scenario or moment — give it texture and context
-- The prompt should feel like a scene they can both step into together
-- End with … so it trails off and invites them to complete it naturally
-- Avoid abstract or generic fill-in-the-blank starters
-- Never ask a direct question like "What is your biggest fear?"
-- Length: 1–3 sentences is ideal. Long enough to set a scene, short enough to feel light
+- Paint a vivid, specific, relatable scenario first — give it texture and detail
+- Then end with a warm, open "what would you do / choose / want?" style question
+- The scenario should feel like something that could actually happen to them
+- Never use trailing … or ask them to finish a sentence
+- Never ask abstract or generic questions like "What is your biggest fear?"
+- The question at the end should feel natural, not clinical
+- Length: 2–4 sentences total. Enough to paint the scene, then land the question cleanly
 - Good examples:
-    "Imagine we finally book that trip we always talk about but never plan. We've just landed and stepped outside the airport — the first thing I'd want to do is…"
-    "It's a rainy Tuesday and neither of us has anywhere to be. The kind of afternoon that just happens. I'd want to spend it…"
-    "There's a version of our future I think about sometimes — not the big milestones, just the quiet ordinary day. In that day, we're…"
-    "I remember a moment early on when I saw a side of you I wasn't expecting. We were…"
-    "If we could design our perfect home together — not about money, just about feeling — the one thing I'd fight for is…"
+    "You both just found out you have a completely free long weekend — no plans, no obligations, no one to check in with. You can go anywhere or do absolutely nothing. What does your perfect version of that weekend look like?"
+    "Imagine you're moving to a new city together and you get to design your place from scratch — no budget pressure, just whatever feels like home to you. What's the one thing you'd insist on having?"
+    "It's late, you're both in the kitchen, and somehow you end up cooking together even though nobody planned it. What are you making, and what does that evening feel like?"
+    "You stumble across an old photo of yourselves from early on — before things got comfortable and familiar. What do you think you'd say to that version of yourselves?"
+    "Imagine you could give each other one completely selfish gift — not about being practical or useful, just something the other person would genuinely love. What would you give?"
 - Bad examples (never do this):
-    "Something I never say enough is…" ← too abstract, no scene
-    "A place I want to take you is…" ← too bare, no texture
-    "What is your biggest fear?" ← direct question
-- Return ONLY the prompt on the first line
+    "Something I never say enough is…" ← sentence completion, no scene
+    "What is your biggest fear?" ← too blunt and abstract
+    "If you could change one thing about our relationship…" ← too loaded with no warmth
+- Return ONLY the prompt
 - Then on a new line: TAGS: tag1, tag2, tag3 (2–4 tags from: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
 
 Depth level: ${depth}/6. ${depthGuide[depth]}
@@ -273,7 +274,7 @@ function getGreeting() {
 // Shows a subtle hint below the question so users know how to respond
 
 function setPromptHint(question, p1ElId, p2ElId) {
-  const hint = '✍️ Step into the scene — finish it in your own words.';
+  const hint = "✍️ Answer honestly — there's no wrong answer here.";
   const el1 = document.getElementById(p1ElId);
   const el2 = document.getElementById(p2ElId);
   if (el1) el1.textContent = hint;

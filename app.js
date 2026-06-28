@@ -3,6 +3,9 @@
    localStorage-only, Groq via Cloudflare Worker
    ============================================ */
 
+// ─── HARDCODED WORKER URL ─────────────────────
+const WORKER_URL = 'https://groq-proxy.henryooi0077.workers.dev/';
+
 // ─── STATE ────────────────────────────────────
 
 const STATE_KEY = 'teasteeep_data';
@@ -20,7 +23,6 @@ function defaultState() {
     couple: {
       partner1: '',
       partner2: '',
-      workerUrl: '',
       sessionsCompleted: 0,
       topicTagsUsed: []
     },
@@ -66,10 +68,9 @@ function getDepthNumber(sessions) {
 // ─── AI CALL ──────────────────────────────────
 
 async function callGroq(messages) {
-  const url = appState.couple.workerUrl;
-  if (!url) throw new Error('No worker URL set.');
+  console.log('[TeaSteep] Calling Groq via worker:', WORKER_URL);
 
-  const res = await fetch(url, {
+  const res = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -80,8 +81,20 @@ async function callGroq(messages) {
     })
   });
 
-  if (!res.ok) throw new Error(`Worker error: ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('[TeaSteep] Worker error:', res.status, errText);
+    throw new Error(`Worker error: ${res.status}`);
+  }
+
   const data = await res.json();
+  console.log('[TeaSteep] Groq response:', data);
+
+  if (!data.choices || !data.choices[0]) {
+    console.error('[TeaSteep] Unexpected response shape:', data);
+    throw new Error('Unexpected response from Groq');
+  }
+
   return data.choices[0].message.content.trim();
 }
 
@@ -92,7 +105,8 @@ async function generateQuestion() {
   const depth = getDepthNumber(couple.sessionsCompleted);
   const mood = currentSession.mood;
   const usedTagsAll = couple.topicTagsUsed.slice(-20).join(', ') || 'none yet';
-  const usedTagsTonight = currentSession.exchanges.map(e => e.tags).flat().join(', ') || 'none yet';
+  const usedTagsTonight = currentSession.exchanges
+    .map(e => e.tags).flat().join(', ') || 'none yet';
 
   const moodGuide = {
     Light: 'Keep it warm, light, and easy. Avoid anything heavy or emotionally demanding. Think: fond memories, small joys, gentle curiosities.',
@@ -116,12 +130,12 @@ Rules:
 - NEVER ask direct questions like "What is your biggest fear?"
 - Frame prompts as observations, shared scenarios, or fill-in-together sentences
 - Examples of good framing: "Something I've never told you about how I felt when we first met is…", "If our relationship were a season, right now it feels like…", "A small thing you do that I quietly love is…"
-- Return ONLY the prompt text, nothing else
-- Also append on a new line: TAGS: tag1, tag2, tag3 (2-4 topic tags like: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
+- Return ONLY the prompt text on the first line, nothing else before it
+- Then on a new line write: TAGS: tag1, tag2, tag3 (2-4 topic tags like: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
 
 Depth level: ${depth}/6. ${depthGuide[depth]}
 Tonight's ceiling: ${mood}. ${moodGuide[mood]}
-Topics used across all sessions (avoid these recently): ${usedTagsAll}
+Topics used across all sessions (avoid recently): ${usedTagsAll}
 Topics used tonight already (avoid completely): ${usedTagsTonight}`;
 
   const raw = await callGroq([
@@ -129,16 +143,20 @@ Topics used tonight already (avoid completely): ${usedTagsTonight}`;
     { role: 'user', content: 'Generate the next prompt for this couple.' }
   ]);
 
-  // Parse out tags
-  const lines = raw.split('\n');
-  const tagLine = lines.find(l => l.startsWith('TAGS:'));
-  const tags = tagLine
-    ? tagLine.replace('TAGS:', '').split(',').map(t => t.trim().toLowerCase())
+  console.log('[TeaSteep] Raw question output:', raw);
+
+  // Parse tags from last line
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const tagLineIndex = lines.findIndex(l => l.startsWith('TAGS:'));
+  const tags = tagLineIndex !== -1
+    ? lines[tagLineIndex].replace('TAGS:', '').split(',').map(t => t.trim().toLowerCase())
     : [];
-  const question = lines
-    .filter(l => !l.startsWith('TAGS:'))
-    .join(' ')
-    .trim();
+  const questionLines = tagLineIndex !== -1
+    ? lines.slice(0, tagLineIndex)
+    : lines;
+  const question = questionLines.join(' ').trim();
+
+  console.log('[TeaSteep] Parsed question:', question, '| Tags:', tags);
 
   return { question, tags };
 }
@@ -149,20 +167,25 @@ async function generateSummary() {
   const { currentSession, couple } = appState;
   const exchanges = currentSession.exchanges;
 
-  if (exchanges.length === 0) return 'A quiet night together is still a night together. 🍵';
+  if (exchanges.length === 0) {
+    return 'A quiet night together is still a night together. 🍵';
+  }
 
   const exchangeText = exchanges.map((e, i) =>
     `Prompt ${i + 1}: "${e.question}"\n${couple.partner1}: "${e.answer1}"\n${couple.partner2}: "${e.answer2}"`
   ).join('\n\n');
 
-  const systemPrompt = `You are a warm, gentle narrator reflecting on a couple's conversation. 
-Write a short, warm summary (3-5 sentences) that reflects something meaningful back to them about tonight's conversation. 
-Be poetic but grounded. Notice small things. Don't be cheesy or over-the-top. 
+  const systemPrompt = `You are a warm, gentle narrator reflecting on a couple's conversation.
+Write a short, warm summary (3-5 sentences) that reflects something meaningful back to them about tonight's conversation.
+Be poetic but grounded. Notice small things. Don't be cheesy or over-the-top.
 Address them warmly. Return only the summary text.`;
 
   return await callGroq([
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `Here is what ${couple.partner1} and ${couple.partner2} shared tonight:\n\n${exchangeText}` }
+    {
+      role: 'user',
+      content: `Here is what ${couple.partner1} and ${couple.partner2} shared tonight:\n\n${exchangeText}`
+    }
   ]);
 }
 
@@ -195,13 +218,11 @@ function getGreeting() {
 function init() {
   const { couple } = appState;
 
-  // First launch check
-  if (!couple.partner1 || !couple.partner2 || !couple.workerUrl) {
+  if (!couple.partner1 || !couple.partner2) {
     showScreen('screen-setup');
     return;
   }
 
-  // Resume interrupted session
   if (appState.currentSession && appState.currentSession.state) {
     resumeSession();
     return;
@@ -212,9 +233,11 @@ function init() {
 
 function showHome() {
   const { couple } = appState;
-  document.getElementById('depth-badge').textContent = getDepthLabel(couple.sessionsCompleted);
+  document.getElementById('depth-badge').textContent =
+    getDepthLabel(couple.sessionsCompleted);
   document.getElementById('home-greeting').textContent = getGreeting();
-  document.getElementById('home-names').textContent = `${couple.partner1} & ${couple.partner2}`;
+  document.getElementById('home-names').textContent =
+    `${couple.partner1} & ${couple.partner2}`;
   showScreen('screen-home');
 }
 
@@ -241,12 +264,19 @@ async function startSession(mood) {
     mood,
     exchanges: [],
     state: 'loading',
-    startDate: new Date().toISOString()
+    startDate: new Date().toISOString(),
+    answer1: null,
+    answer2: null,
+    answer1Draft: '',
+    answer2Draft: '',
+    currentQuestion: null,
+    currentTags: []
   };
   saveState();
 
-  renderP1Screen(true); // show loading
+  // Show P1 screen with loading state immediately
   showScreen('screen-p1');
+  setQuestionLoadingState(true);
 
   try {
     const { question, tags } = await generateQuestion();
@@ -256,45 +286,60 @@ async function startSession(mood) {
     saveState();
     renderP1Screen();
   } catch (err) {
-    showToast('Could not steep a question. Check your Worker URL.');
+    console.error('[TeaSteep] Failed to generate question:', err);
+    showToast('Could not steep a question. Check console for details.');
+    appState.currentSession = null;
+    saveState();
     showHome();
+  }
+}
+
+// ─── LOADING STATE HELPER ─────────────────────
+
+function setQuestionLoadingState(isLoading) {
+  const qText = document.getElementById('question-text-p1');
+  const qLoading = document.getElementById('q-loading');
+
+  if (isLoading) {
+    qLoading.style.display = 'flex';
+    qText.style.display = 'none';
+    qText.textContent = '';
+  } else {
+    qLoading.style.display = 'none';
+    qText.style.display = 'block';
   }
 }
 
 // ─── P1 SCREEN ────────────────────────────────
 
-function renderP1Screen(loading = false) {
+function renderP1Screen() {
   const { couple, currentSession } = appState;
+
   document.getElementById('p1-indicator').textContent = `● ${couple.partner1}`;
-  document.getElementById('p1-answer-label').textContent = `${couple.partner1}'s thoughts…`;
+  document.getElementById('p1-answer-label').textContent =
+    `${couple.partner1}'s thoughts…`;
 
-  const qText = document.getElementById('question-text-p1');
-  const qLoading = document.getElementById('q-loading');
+  setQuestionLoadingState(false);
+  document.getElementById('question-text-p1').textContent =
+    currentSession.currentQuestion || '';
 
-  if (loading) {
-    qText.style.display = 'none';
-    qLoading.style.display = 'block';
-  } else {
-    qLoading.style.display = 'none';
-    qText.style.display = 'block';
-    qText.textContent = currentSession.currentQuestion;
-  }
-
-  // Restore saved answer if resuming
-  const savedAnswer = currentSession.answer1Draft || '';
-  document.getElementById('answer-p1').value = savedAnswer;
+  document.getElementById('answer-p1').value =
+    currentSession.answer1Draft || '';
 }
 
 // ─── P2 SCREEN ────────────────────────────────
 
 function renderP2Screen() {
   const { couple, currentSession } = appState;
-  document.getElementById('p2-indicator').textContent = `● ${couple.partner2}`;
-  document.getElementById('p2-answer-label').textContent = `${couple.partner2}'s thoughts…`;
-  document.getElementById('question-text-p2').textContent = currentSession.currentQuestion;
 
-  const savedAnswer = currentSession.answer2Draft || '';
-  document.getElementById('answer-p2').value = savedAnswer;
+  document.getElementById('p2-indicator').textContent = `● ${couple.partner2}`;
+  document.getElementById('p2-answer-label').textContent =
+    `${couple.partner2}'s thoughts…`;
+  document.getElementById('question-text-p2').textContent =
+    currentSession.currentQuestion || '';
+
+  document.getElementById('answer-p2').value =
+    currentSession.answer2Draft || '';
 }
 
 // ─── REVEAL SCREEN ────────────────────────────
@@ -313,15 +358,19 @@ function renderRevealScreen() {
 // ─── NEXT QUESTION ────────────────────────────
 
 async function nextQuestion() {
-  document.getElementById('question-text-p1').style.display = 'none';
-  document.getElementById('q-loading').style.display = 'block';
-  document.getElementById('answer-p1').value = '';
-  document.getElementById('answer-p2').value = '';
+  // Reset drafts and show loading
   appState.currentSession.answer1Draft = '';
   appState.currentSession.answer2Draft = '';
+  appState.currentSession.answer1 = null;
+  appState.currentSession.answer2 = null;
   appState.currentSession.state = 'loading';
   saveState();
+
+  document.getElementById('answer-p1').value = '';
+  document.getElementById('answer-p2').value = '';
+
   showScreen('screen-p1');
+  setQuestionLoadingState(true);
 
   try {
     const { question, tags } = await generateQuestion();
@@ -331,7 +380,9 @@ async function nextQuestion() {
     saveState();
     renderP1Screen();
   } catch (err) {
+    console.error('[TeaSteep] Failed to generate next question:', err);
     showToast('Could not steep the next question. Try again.');
+    setQuestionLoadingState(false);
   }
 }
 
@@ -339,38 +390,44 @@ async function nextQuestion() {
 
 async function wrapUp() {
   showScreen('screen-summary');
-  document.getElementById('summary-loading').style.display = 'flex';
-  document.getElementById('summary-text').style.display = 'none';
 
+  const summaryLoading = document.getElementById('summary-loading');
+  const summaryText = document.getElementById('summary-text');
+
+  summaryLoading.style.display = 'flex';
+  summaryText.style.display = 'none';
+  summaryText.textContent = '';
+
+  let summary = '';
   try {
-    const summary = await generateSummary();
-    document.getElementById('summary-loading').style.display = 'none';
-    document.getElementById('summary-text').style.display = 'block';
-    document.getElementById('summary-text').textContent = summary;
-  } catch {
-    document.getElementById('summary-loading').style.display = 'none';
-    document.getElementById('summary-text').style.display = 'block';
-    document.getElementById('summary-text').textContent =
-      "Tonight you steeped something together. That's enough. 🍵";
+    summary = await generateSummary();
+  } catch (err) {
+    console.error('[TeaSteep] Summary generation failed:', err);
+    summary = "Tonight you steeped something together. That's enough. 🍵";
   }
 
-  // Session stats
+  summaryLoading.style.display = 'none';
+  summaryText.style.display = 'block';
+  summaryText.textContent = summary;
+
   const exchanges = appState.currentSession.exchanges;
   document.getElementById('session-stats').innerHTML =
     `${exchanges.length} question${exchanges.length !== 1 ? 's' : ''} explored · ${appState.currentSession.mood} night`;
 
-  // Save session
+  // Persist session
   const { couple, currentSession } = appState;
   const allTags = currentSession.exchanges.flatMap(e => e.tags);
   couple.topicTagsUsed = [...couple.topicTagsUsed, ...allTags].slice(-60);
   couple.sessionsCompleted += 1;
 
   appState.sessions.push({
-    date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+    date: new Date().toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    }),
     mood: currentSession.mood,
     depth: getDepthNumber(couple.sessionsCompleted),
     exchanges: currentSession.exchanges,
-    summary: document.getElementById('summary-text').textContent
+    summary
   });
 
   appState.currentSession = null;
@@ -384,16 +441,21 @@ function renderHistory() {
   const sessions = [...appState.sessions].reverse();
 
   if (sessions.length === 0) {
-    list.innerHTML = `<p style="text-align:center;color:var(--text-muted);font-style:italic;padding:40px 0;">
-      Your journey starts tonight. 🍵</p>`;
+    list.innerHTML = `<p style="text-align:center;color:var(--text-muted);
+      font-style:italic;padding:40px 0;">Your journey starts tonight. 🍵</p>`;
     return;
   }
 
   list.innerHTML = sessions.map((s, i) => `
-    <div class="history-entry" onclick="expandHistory(${appState.sessions.length - 1 - i})">
+    <div class="history-entry"
+      onclick="expandHistory(${appState.sessions.length - 1 - i})">
       <div class="history-date">${s.date}</div>
-      <div class="history-mood">${moodEmoji(s.mood)} ${s.mood} night · ${s.exchanges.length} questions</div>
-      <div class="history-preview">${s.summary || s.exchanges[0]?.question || ''}</div>
+      <div class="history-mood">
+        ${moodEmoji(s.mood)} ${s.mood} night · ${s.exchanges.length} questions
+      </div>
+      <div class="history-preview">
+        ${s.summary || s.exchanges[0]?.question || ''}
+      </div>
     </div>
   `).join('');
 }
@@ -408,7 +470,9 @@ function expandHistory(index) {
 
   const detail = s.exchanges.map(e => `
     <div class="history-entry" style="cursor:default">
-      <div class="history-mood" style="font-style:italic;font-family:'Lora',serif">"${e.question}"</div>
+      <div class="history-mood" style="font-style:italic;font-family:'Lora',serif">
+        "${e.question}"
+      </div>
       <div style="margin-top:10px">
         <div class="answer-name">${couple.partner1}</div>
         <div class="answer-text">${e.answer1}</div>
@@ -420,12 +484,14 @@ function expandHistory(index) {
     </div>
   `).join('');
 
-  const list = document.getElementById('history-list');
-  list.innerHTML = `
-    <button class="btn-ghost" onclick="renderHistory()" style="margin-bottom:8px">← All sessions</button>
+  document.getElementById('history-list').innerHTML = `
+    <button class="btn-ghost" onclick="renderHistory()"
+      style="margin-bottom:8px">← All sessions</button>
     <div class="history-entry" style="cursor:default;background:var(--surface-2)">
       <div class="history-date">${s.date} · ${moodEmoji(s.mood)} ${s.mood}</div>
-      <div class="summary-text" style="text-align:left;margin-top:8px">${s.summary || ''}</div>
+      <div class="summary-text" style="text-align:left;margin-top:8px">
+        ${s.summary || ''}
+      </div>
     </div>
     ${detail}
   `;
@@ -433,27 +499,22 @@ function expandHistory(index) {
 
 // ─── EVENT LISTENERS ──────────────────────────
 
-// Setup
+// Setup (no Worker URL field needed anymore)
 document.getElementById('btn-setup-done').addEventListener('click', () => {
   const p1 = document.getElementById('input-p1').value.trim();
   const p2 = document.getElementById('input-p2').value.trim();
-  const url = document.getElementById('input-worker').value.trim();
 
-  if (!p1 || !p2) return showToast('Please enter both names.');
-  if (!url || !url.startsWith('http')) return showToast('Please enter a valid Worker URL.');
+  if (!p1 || !p2) return showToast('Please enter both names. 🍵');
 
   appState.couple.partner1 = p1;
   appState.couple.partner2 = p2;
-  appState.couple.workerUrl = url;
   saveState();
   showHome();
 });
 
-// Mood selection
+// Mood selection → start session
 document.querySelectorAll('.mood-card').forEach(card => {
-  card.addEventListener('click', () => {
-    startSession(card.dataset.mood);
-  });
+  card.addEventListener('click', () => startSession(card.dataset.mood));
 });
 
 // P1 done
@@ -486,7 +547,7 @@ document.getElementById('answer-p2').addEventListener('input', e => {
   }
 });
 
-// Handoff ready
+// Handoff → P2
 document.getElementById('btn-handoff-ready').addEventListener('click', () => {
   renderP2Screen();
   showScreen('screen-p2');
@@ -502,7 +563,6 @@ document.getElementById('btn-p2-done').addEventListener('click', () => {
   currentSession.answer2Draft = '';
   currentSession.state = 'revealed';
 
-  // Commit exchange
   currentSession.exchanges.push({
     question: currentSession.currentQuestion,
     tags: currentSession.currentTags || [],
@@ -522,10 +582,10 @@ document.getElementById('btn-p2-done').addEventListener('click', () => {
 // Next question
 document.getElementById('btn-next').addEventListener('click', nextQuestion);
 
-// Wrap up buttons (from multiple screens)
+// Wrap up (from multiple screens)
 ['btn-wrapup-p1', 'btn-wrapup-p2', 'btn-wrapup-reveal'].forEach(id => {
   document.getElementById(id).addEventListener('click', () => {
-    if (confirm("Wrap up tonight's session?")) wrapUp();
+    if (confirm('Wrap up tonight\'s session?')) wrapUp();
   });
 });
 
@@ -537,31 +597,24 @@ document.getElementById('btn-history').addEventListener('click', () => {
   renderHistory();
   showScreen('screen-history');
 });
-
 document.getElementById('btn-back-history').addEventListener('click', showHome);
 
 // Settings
 document.getElementById('btn-settings').addEventListener('click', () => {
-  const { couple } = appState;
-  document.getElementById('settings-p1').value = couple.partner1;
-  document.getElementById('settings-p2').value = couple.partner2;
-  document.getElementById('settings-worker').value = couple.workerUrl;
+  document.getElementById('settings-p1').value = appState.couple.partner1;
+  document.getElementById('settings-p2').value = appState.couple.partner2;
   showScreen('screen-settings');
 });
-
 document.getElementById('btn-back-settings').addEventListener('click', showHome);
 
 document.getElementById('btn-save-settings').addEventListener('click', () => {
   const p1 = document.getElementById('settings-p1').value.trim();
   const p2 = document.getElementById('settings-p2').value.trim();
-  const url = document.getElementById('settings-worker').value.trim();
 
   if (!p1 || !p2) return showToast('Names cannot be empty.');
-  if (!url || !url.startsWith('http')) return showToast('Please enter a valid Worker URL.');
 
   appState.couple.partner1 = p1;
   appState.couple.partner2 = p2;
-  appState.couple.workerUrl = url;
   saveState();
   showToast('Saved. ✓');
   showHome();

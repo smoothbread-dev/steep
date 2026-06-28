@@ -177,59 +177,58 @@ async function generateQuestion() {
     'Deeply bonded. The most personal and meaningful prompts are appropriate.'
   ];
 
-  const prompt = `You are a conversation guide for a Malaysian Chinese couple who want to genuinely understand each other better.
+  const prompt = `You are a conversation guide for a couple who want to genuinely understand each other better.
 
 CORE PURPOSE:
-- The goal is not just fun — it is to help two people who love each other discover things they never thought to ask
+- Help two people who love each other discover things they never thought to ask
 - Every question should feel like: "I thought I knew you, but I never actually asked you this"
-- The best questions are ones where both people have a real answer that might surprise the other
-- Rooted in real life — not hypothetical fantasy, not therapy-speak
-
-CULTURAL CONTEXT:
-- They are Malaysian Chinese — their world includes kopitiam breakfasts, dim sum Sundays, CNY family gatherings, pasar malam nights, reunion dinners, filial expectations, "face" and family pressure, the mix of English with Mandarin or Cantonese
-- Do NOT reference mamak, roti canai, teh tarik — wrong culture
-- Use familiar references naturally — kopitiam, dim sum, CNY, in-laws, pasar malam, bak kut teh — only when they genuinely fit the question, not forced
-
-SENSITIVE TOPICS — strictly avoid these:
-- Do NOT ask anything that imagines a deceased person speaking, reacting, or being present — e.g. "what would your dad say?", "what do you think he would think of this?"
-- Do NOT ask questions that romanticise or reference loss, grief, or missing someone who has passed
-- Do NOT ask about death, legacy, or "what would you want people to remember about you"
-- If a question touches on family or parents, keep it grounded in the present or the person's own feelings — never project onto someone who is gone
-- When in doubt, leave the question in the present tense and about living feelings
+- Both people should have a real answer that might surprise the other
+- Rooted in real feelings and real life — not hypothetical fantasy, not therapy-speak
 
 TONE:
-- Warm, casual, a little cheeky — like a close friend asking over kopi
+- Quiet, warm, and honest — like a close friend asking over a late night drink
 - Never dramatic, never poetic, never scripted
-- 2–3 sentences — set up a real relatable situation, then ask one honest question that makes them think about each other
+- 1–2 sentences max — set up a small relatable moment, then ask one honest question
 
-GOOD EXAMPLES (this is the exact energy and purpose):
-  "When you're having a really bad day and you don't want to talk about it yet — what's the thing you actually need from me in that moment, even if you'd never ask for it?"
-  "Think about the way you were raised — is there something from your upbringing that you've carried into how you show love to me, even without realising it?"
-  "If we're being honest — is there something you've always wanted us to do together but never brought up because you weren't sure I'd be into it?"
-  "CNY reunion dinner, the relatives start asking about our plans for kids or marriage. What are you actually feeling in that moment — and what do you wish you could say out loud?"
-  "If I had a big opportunity that meant we'd have to do long distance for a year, what would be going through your head — and what would you actually say to me?"
-  "Is there something about your family or how you grew up that you think I still don't fully understand about you?"
-  "When we argue, what's the thing you wish I knew about how you're feeling that you can never quite say in the moment?"
-  "If you could change one small thing about how we spend time together — nothing big, just a small habit or ritual — what would it be?"
+FORMAT:
+- The question should feel like it came from a person, not an app
+- No flowery language, no grand setups
+- Short. Direct. Genuine.
 
-BAD EXAMPLES (never do this):
-  "What do you think your dad would say about us now?" ← references someone who has passed
-  "If your father could see you today, what do you think he'd feel?" ← same issue
-  "Picture us cooking our favourite mamak dish..." ← wrong culture
-  "If you won the lottery what would you buy?" ← fun but tells you nothing real
-  "It's the night before your anniversary and fairy lights..." ← too dramatic and scripted
-  "What is your biggest fear?" ← too blunt, no warmth or context
+GOOD EXAMPLES:
+  "When you're having a really bad day and don't want to talk yet — what do you actually need from me in that moment, even if you'd never ask for it?"
+  "Is there something about the way you grew up that you think I still don't fully understand about you?"
+  "When we argue, what's the thing you wish I knew about how you were feeling that you can never quite say in the moment?"
+  "If you could change one small thing about how we spend time together — nothing big, just a small habit — what would it be?"
+  "What's something you've never said out loud to me, not because you were hiding it, but because you never found the right moment?"
+  "Is there something you've always wanted us to do together but never brought up because you weren't sure I'd be into it?"
+  "What does feeling truly loved by me actually look like to you — not in theory, but in the small everyday things?"
+  "When you imagine us five years from now, what's the one thing you hope hasn't changed?"
+
+THE REAL RULE — it's not about the topic, it's about how you ask:
+- Any topic can work if it's wrapped in enough warmth and context
+- Any topic falls flat if it's asked cold, bare, or without a human setup
+- The question should feel like it came from someone who knows them — not a quiz card
+
+BAD EXAMPLES (these are bad because of HOW they're asked, not what they're about):
+  "What is your biggest fear?" ← too cold and bare. Wrap it: "Is there something you're quietly afraid of that you don't really talk about — not a dramatic fear, just something that sits in the back of your mind sometimes?"
+  "If you won the lottery what would you buy?" ← too surface. Push it further: "If money genuinely wasn't a thing anymore — not fantasy rich, just completely free — what would your life actually look like?"
+  "What would your younger self think of you?" ← too self-help-y on its own. Ground it: "Is there something about who you've become that you think your younger self would be surprised by — good or bad?"
+  "If you could change one thing about the world..." ← too broad. Make it personal: "Is there something about the world your future kids would grow up in that quietly worries you — something you don't bring up much?"
+  "What's your love language?" ← too clinical. Ask the real thing underneath: "What does feeling truly loved by me actually look like in the small everyday moments — not in theory?"
+  "Describe your perfect day." ← too generic. Make it about us: "If we had a completely free day together with no plans and no obligations — what would you actually want it to look like?"
 
 RULES:
-- Return ONLY the prompt on the first line
-- Then on a new line: TAGS: tag1, tag2, tag3 (2–4 tags from: family, dreams, childhood, conflict, food, travel, future, memory, comfort, growth)
+- Return ONLY the question on the first line
+- Then on a new line: TAGS: tag1, tag2, tag3 (2–4 tags from: family, dreams, childhood, conflict, future, memory, comfort, growth, love, habits)
+- No preamble, no explanation, just the question then the tags
 
 Depth level: ${depth}/6. ${depthGuide[depth]}
 Tonight's ceiling: ${mood}. ${moodGuide[mood]}
 Topics used across all sessions (avoid recently): ${usedTagsAll}
 Topics used tonight already (avoid completely): ${usedTagsTonight}
 
-Generate the prompt now:`;
+Generate the question now:`;
 
   const raw = await callGroq(prompt);
   console.log('[TeaSteep] Raw question output:', raw);

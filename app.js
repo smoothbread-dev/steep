@@ -1,5 +1,5 @@
 /* ============================================
-   TEASTEEEP — APP LOGIC
+   STEEP — APP LOGIC
    localStorage-only, Groq via Cloudflare Worker
    ============================================ */
 
@@ -8,7 +8,7 @@ const WORKER_URL = 'https://groq-proxy.henryooi0077.workers.dev';
 
 // ─── STATE ────────────────────────────────────
 
-const STATE_KEY = 'teasteeep_data';
+const STATE_KEY = 'steep_data';
 
 function loadState() {
   try {
@@ -120,7 +120,7 @@ function renderHomeStats() {
 // ─── AI CALL ──────────────────────────────────
 
 async function callGroq(userPrompt) {
-  console.log('[TeaSteep] Calling worker...');
+  console.log('[Steep] Calling worker...');
 
   const res = await fetch(WORKER_URL, {
     method: 'POST',
@@ -135,15 +135,15 @@ async function callGroq(userPrompt) {
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error('[TeaSteep] Worker error:', res.status, errText);
+    console.error('[Steep] Worker error:', res.status, errText);
     throw new Error(`Worker error: ${res.status}`);
   }
 
   const data = await res.json();
-  console.log('[TeaSteep] Response:', data);
+  console.log('[Steep] Response:', data);
 
   if (!data.choices?.[0]?.message?.content) {
-    console.error('[TeaSteep] Empty or missing content:', data);
+    console.error('[Steep] Empty or missing content:', data);
     throw new Error('No content returned from model');
   }
 
@@ -231,7 +231,7 @@ Topics used tonight already (avoid completely): ${usedTagsTonight}
 Generate the question now:`;
 
   const raw = await callGroq(prompt);
-  console.log('[TeaSteep] Raw question output:', raw);
+  console.log('[Steep] Raw question output:', raw);
 
   const lines        = raw.split('\n').map(l => l.trim()).filter(Boolean);
   const tagLineIndex = lines.findIndex(l => l.startsWith('TAGS:'));
@@ -241,7 +241,7 @@ Generate the question now:`;
   const question     = (tagLineIndex !== -1 ? lines.slice(0, tagLineIndex) : lines)
     .join(' ').trim();
 
-  console.log('[TeaSteep] Parsed question:', question, '| Tags:', tags);
+  console.log('[Steep] Parsed question:', question, '| Tags:', tags);
   return { question, tags };
 }
 
@@ -410,7 +410,7 @@ async function startSession(mood) {
     showRefreshBtn();
     updateRefreshBtn();
   } catch (err) {
-    console.error('[TeaSteep] Failed to generate question:', err);
+    console.error('[Steep] Failed to generate question:', err);
     showToast('Could not steep a question. Check console for details.');
     appState.currentSession = null;
     saveState();
@@ -510,7 +510,7 @@ async function refreshQuestion() {
     showRefreshBtn();
     updateRefreshBtn();
   } catch (err) {
-    console.error('[TeaSteep] Failed to refresh question:', err);
+    console.error('[Steep] Failed to refresh question:', err);
     showToast('Could not steep a new question. Try again.');
     setQuestionLoadingState(false);
     showRefreshBtn();
@@ -548,7 +548,7 @@ async function nextQuestion() {
     showRefreshBtn();
     updateRefreshBtn();
   } catch (err) {
-    console.error('[TeaSteep] Failed to generate next question:', err);
+    console.error('[Steep] Failed to generate next question:', err);
     showToast('Could not steep the next question. Try again.');
     setQuestionLoadingState(false);
   }
@@ -570,7 +570,7 @@ async function wrapUp() {
   try {
     summary = await generateSummary();
   } catch (err) {
-    console.error('[TeaSteep] Summary generation failed:', err);
+    console.error('[Steep] Summary generation failed:', err);
     summary = "Tonight you steeped something together. That's enough. 🍵";
   }
 
